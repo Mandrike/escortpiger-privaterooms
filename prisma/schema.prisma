@@ -1,0 +1,147 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  CLIENT
+  ESCORT
+  HOST
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  phone         String?
+  role          Role      @default(CLIENT)
+  verified      Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  profile       Profile?
+  rooms         Room[]
+  roomBookings  RoomBooking[]
+  clientBookings Booking[]
+  reviewsSent   Review[]   @relation("ReviewFrom")
+}
+
+model Profile {
+  id              String     @id @default(cuid())
+  userId          String     @unique
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  displayName     String
+  photos          String[]
+  bio             String?
+  age             Int?
+  city            String?
+  isOnline        Boolean    @default(false)
+  rating          Float      @default(0.0)
+  reviewCount     Int        @default(0)
+  services        Json
+  availability    Json[]     // [{ start, end, city }]
+  verified        Boolean    @default(false)
+  lastActive      DateTime   @default(now())
+
+  bookings        Booking[]  @relation("BookingToProfile")
+  reviews         Review[]   @relation("ReviewToProfile")
+
+  @@index([city])
+  @@index([verified])
+}
+
+model Room {
+  id                String        @id @default(cuid())
+  hostId            String
+  host              User          @relation(fields: [hostId], references: [id], onDelete: Cascade)
+
+  title             String
+  description       String?
+  city              String
+  address           String?
+  pricePerWeek      Int
+  pricePerMonth     Int
+  pricePerHalfYear  Int?
+  photos            String[]
+  isRotationReady   Boolean       @default(true)
+  amenities         Json
+  maxGuests         Int           @default(1)
+
+  roomBookings      RoomBooking[]
+  reviews           Review[]      @relation("ReviewToRoom")
+
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([city])
+  @@index([isRotationReady])
+}
+
+model RoomBooking {
+  id              String        @id @default(cuid())
+  roomId          String
+  room            Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  escortId        String
+  escort          User          @relation(fields: [escortId], references: [id])
+
+  startDate       DateTime
+  endDate         DateTime
+  status          BookingStatus @default(PENDING)
+  totalPrice      Int
+  notes           String?
+  syncedToProfile Boolean       @default(false)
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([startDate])
+  @@index([endDate])
+}
+
+model Booking {
+  id              String        @id @default(cuid())
+  clientId        String
+  client          User          @relation(fields: [clientId], references: [id])
+  profileId       String
+  profile         Profile       @relation("BookingToProfile", fields: [profileId], references: [id])
+
+  roomBookingId   String?
+  startTime       DateTime
+  durationHours   Int
+  totalPrice      Int
+  status          BookingStatus @default(PENDING)
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model Review {
+  id            String   @id @default(cuid())
+  fromUserId    String
+  fromUser      User     @relation("ReviewFrom", fields: [fromUserId], references: [id])
+
+  toProfileId   String?
+  toProfile     Profile? @relation("ReviewToProfile", fields: [toProfileId], references: [id])
+
+  toRoomId      String?
+  toRoom        Room?    @relation("ReviewToRoom", fields: [toRoomId], references: [id])
+
+  rating        Float
+  comment       String?
+  createdAt     DateTime @default(now())
+
+  @@unique([fromUserId, toProfileId])
+  @@unique([fromUserId, toRoomId])
+}
